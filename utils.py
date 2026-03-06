@@ -54,15 +54,33 @@ async def post_job(context: ContextTypes.DEFAULT_TYPE, force_one=False):
         if not force_one and (not setting or setting.value == 'off'):
             return
 
+        # ✅ جلب البيانات كـ list of dicts بدلاً من ORM objects
+        channels_data = []
         channels = session.query(db.Channel).filter_by(is_active=True).all()
-        print(f"Found {len(channels)} active channels.")
+        
+        for ch in channels:
+            channels_data.append({
+                'id': ch.id,
+                'channel_id': ch.channel_id,
+                'title': ch.title,
+                'category': ch.category,
+                'msg_format': ch.msg_format,
+                'time_type': ch.time_type,
+                'time_value': ch.time_value,
+                'last_post_at': ch.last_post_at,
+                'sticker_file_id': ch.sticker_file_id,
+                'sticker_interval': ch.sticker_interval,
+                'msg_counter': ch.msg_counter
+            })
+        
+        print(f"Found {len(channels_data)} active channels.")
 
-    if not channels:
+    if not channels_data:
         return
 
     now = datetime.now()
     
-    for channel in channels:
+    for channel_data in channels_data:
         try:
             should_post = False
             reason = ""
@@ -70,77 +88,75 @@ async def post_job(context: ContextTypes.DEFAULT_TYPE, force_one=False):
             if force_one:
                 should_post = True
                 reason = "Force Post"
-            elif channel.time_type == 'default':
+            elif channel_data['time_type'] == 'default':
                 if random.random() < 0.05:
                     should_post = True
                     reason = "Random Post (5%)"
             
-            elif channel.time_type == 'fixed':
-                if channel.time_value:
-                    allowed_hours = [int(h.strip()) for h in channel.time_value.split(',')]
+            elif channel_data['time_type'] == 'fixed':
+                if channel_data['time_value']:
+                    allowed_hours = [int(h.strip()) for h in channel_data['time_value'].split(',')]
                     current_hour = now.hour
                     if current_hour in allowed_hours:
-                        # ✅ جلب last_post_at من قاعدة البيانات مرة أخرى للتأكد من freshness
-                        with db.get_db_session() as check_session:
-                            fresh_channel = check_session.query(db.Channel).filter_by(id=channel.id).first()
-                            if fresh_channel.last_post_at:
-                                last_hour = fresh_channel.last_post_at.hour
-                                if last_hour != current_hour:
-                                    should_post = True
-                                    reason = f"Fixed Time {current_hour}"
-                            else:
+                        if channel_data['last_post_at']:
+                            last_hour = channel_data['last_post_at'].hour
+                            if last_hour != current_hour:
                                 should_post = True
+                                reason = f"Fixed Time {current_hour}"
+                        else:
+                            should_post = True
 
-            elif channel.time_type == 'interval':
-                if channel.time_value and channel.last_post_at:
-                    interval_minutes = int(channel.time_value)
-                    diff = now - channel.last_post_at
+            elif channel_data['time_type'] == 'interval':
+                if channel_data['time_value'] and channel_data['last_post_at']:
+                    interval_minutes = int(channel_data['time_value'])
+                    diff = now - channel_data['last_post_at']
                     if diff.total_seconds() >= (interval_minutes * 60):
                         should_post = True
                         reason = "Interval Passed"
-                elif not channel.last_post_at:
+                elif not channel_data['last_post_at']:
                     should_post = True
 
             if should_post:
                 # ✅ جلب المحتوى في جلسة منفصلة
-                text = db.get_next_content(channel.category)
+                text = db.get_next_content(channel_data['category'])
                 if not text:
                     continue
 
-                parse_mode = 'HTML' if channel.msg_format == 'blockquote' else None
-                if channel.msg_format == 'blockquote':
+                parse_mode = 'HTML' if channel_data['msg_format'] == 'blockquote' else None
+                if channel_data['msg_format'] == 'blockquote':
                     text = f"<blockquote>{text}</blockquote>"
 
                 # إرسال الاقتباس
                 sent_message = await context.bot.send_message(
-                    chat_id=channel.channel_id,
+                    chat_id=channel_data['channel_id'],
                     text=text,
                     parse_mode=parse_mode
                 )
                 
                 # ✅ منطق الملصق التفاعلي مع Context Manager
-                with db.get_db_session() as sticker_session:
-                    db_channel = sticker_session.query(db.Channel).filter_by(id=channel.id).first()
-                    
-                    if db_channel and db_channel.sticker_interval and db_channel.sticker_file_id:
-                        db_channel.msg_counter += 1
+                if channel_data['sticker_interval'] and channel_data['sticker_file_id']:
+                    with db.get_db_session() as sticker_session:
+                        db_channel = sticker_session.query(db.Channel).filter_by(id=channel_data['id']).first()
                         
-                        if db_channel.msg_counter >= db_channel.sticker_interval:
-                            try:
-                                # إرسال الملصق بشكل مستقل
-                                await context.bot.send_sticker(
-                                    chat_id=channel.channel_id,
-                                    sticker=db_channel.sticker_file_id
-                                )
-                                
-                                db_channel.msg_counter = 0
-                                logger.info(f"Sticker sent via post_job to {db_channel.title}")
-                            except Exception as e:
-                                logger.error(f"Error sending sticker: {e}")
+                        if db_channel:
+                            db_channel.msg_counter += 1
+                            
+                            if db_channel.msg_counter >= channel_data['sticker_interval']:
+                                try:
+                                    # إرسال الملصق بشكل مستقل
+                                    await context.bot.send_sticker(
+                                        chat_id=channel_data['channel_id'],
+                                        sticker=channel_data['sticker_file_id']
+                                    )
+                                    
+                                    db_channel.msg_counter = 0
+                                    logger.info(f"Sticker sent via post_job to {db_channel.title}")
+                                except Exception as e:
+                                    logger.error(f"Error sending sticker: {e}")
                 
                 # ✅ تحديث وقت النشر الأخير
                 with db.get_db_session() as update_session:
-                    db_channel = update_session.query(db.Channel).filter_by(id=channel.id).first()
+                    db_channel = update_session.query(db.Channel).filter_by(id=channel_data['id']).first()
                     if db_channel:
                         db_channel.last_post_at = now
                 
@@ -149,8 +165,8 @@ async def post_job(context: ContextTypes.DEFAULT_TYPE, force_one=False):
                 await asyncio.sleep(1) 
 
         except Exception as e:
-            logger.error(f"ERROR in {channel.title}: {e}")
-            print(f"ERROR in {channel.title}: {e}")
+            logger.error(f"ERROR in {channel_data.get('title', 'Unknown')}: {e}")
+            print(f"ERROR in {channel_data.get('title', 'Unknown')}: {e}")
 
 async def finalize_channel_addition(update, context, query, role):
     """إنهاء إضافة القناة"""
