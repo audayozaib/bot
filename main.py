@@ -2,7 +2,7 @@ import logging
 import asyncio
 from sqlalchemy import text
 from telegram.ext import (
-    Application,
+    Updater,  # ✅ استخدم Updater بدلاً من Application
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
@@ -54,52 +54,48 @@ def main():
         logger.error(f"Database connection failed: {e}")
         raise
 
-    application = Application.builder().token(config.TOKEN).build()
+    # ✅ استخدم Updater بدلاً من Application
+    updater = Updater(token=config.TOKEN, use_context=True)
+    dispatcher = updater.dispatcher
 
     # --- تسجيل المعالجات ---
 
     # 1. معالج الأوامر (مثل /start)
-    application.add_handler(CommandHandler("start", start.start))
+    dispatcher.add_handler(CommandHandler("start", start.start))
 
     # 2. معالج الأزرار (CallbackQuery)
-    application.add_handler(CallbackQueryHandler(buttons.button_handler))
+    dispatcher.add_handler(CallbackQueryHandler(buttons.button_handler))
     
-    # 3. معالج الرسائل في الخاص (تم التعديل هنا لقبول الملصقات)
-    application.add_handler(MessageHandler(
+    # 3. معالج الرسائل في الخاص
+    dispatcher.add_handler(MessageHandler(
         filters.ChatType.PRIVATE & (filters.TEXT | filters.Document.MimeType("text/plain") | filters.Sticker.ALL), 
         messages.message_handler
     ))
 
     # 4. معالج كلمة "تفعيل" في المجموعات
-    application.add_handler(MessageHandler(
+    dispatcher.add_handler(MessageHandler(
         filters.Regex("^تفعيل$") & filters.ChatType.GROUPS, 
         messages.message_handler
     ))
     
     # 5. معالج مراقبة القنوات للملصق التفاعلي
-    application.add_handler(MessageHandler(
+    dispatcher.add_handler(MessageHandler(
         filters.ChatType.CHANNEL & (filters.TEXT | filters.PHOTO), 
         channel_monitor.channel_monitor
     ))
 
     # 6. أحداث العضوية (المغادرة)
-    application.add_handler(
+    dispatcher.add_handler(
         ChatMemberHandler(events.chat_member_handler, ChatMemberHandler.CHAT_MEMBER)
     )
 
-    # ✅ تعديل 3: إضافة معالج لإغلاق الجلسات عند إيقاف البوت
-    async def shutdown(application):
-        logger.info("Shutting down... Closing database connections")
-        db.Session.remove()  # إغلاق جميع جلسات scoped_session
-    
-    application.post_shutdown = shutdown
-
     # تشغيل النشر التلقائي
-    job_queue = application.job_queue
+    job_queue = updater.job_queue
     job_queue.run_repeating(utils.post_job, interval=60, first=10)
 
     print("Bot is running...")
-    application.run_polling()
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == '__main__':
     if hasattr(config, 'API_ID') and hasattr(config, 'API_HASH'):
