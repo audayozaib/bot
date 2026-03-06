@@ -16,6 +16,10 @@ API_HASH = os.getenv('API_HASH')
 # يجلب من .env أولاً، إذا لم يوجد يبحث في Railway
 DATABASE_URL = os.getenv('DATABASE_URL')
 
+# ✅ إصلاح: تحويل mysql:// إلى mysql+pymysql:// للعمل مع PyMySQL
+if DATABASE_URL and DATABASE_URL.startswith('mysql://'):
+    DATABASE_URL = DATABASE_URL.replace('mysql://', 'mysql+pymysql://', 1)
+
 # إذا لم يوجد DATABASE_URL، يبنيه من الأجزاء
 if not DATABASE_URL:
     DB_USER = os.getenv('DB_USER', 'root')
