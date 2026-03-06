@@ -22,4 +22,4 @@ COPY Mybot-main/ .
 RUN mkdir -p /app/data
 
 # تشغيل البوت
-CMD ["python", "main.py"]
+CMD ["python", "mybot-main main.py"]
