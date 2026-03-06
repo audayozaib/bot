@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 
+# تحميل المتغيرات من .env أولاً
 load_dotenv()
 
 # === Telegram Bot ===
@@ -12,16 +13,11 @@ API_ID = int(os.getenv('API_ID', '0')) if os.getenv('API_ID') else None
 API_HASH = os.getenv('API_HASH')
 
 # === Database Configuration ===
-# Railway يعطي DATABASE_URL تلقائياً عند إضافة MySQL
+# يجلب من .env أولاً، إذا لم يوجد يبحث في Railway
 DATABASE_URL = os.getenv('DATABASE_URL')
 
-if DATABASE_URL:
-    # تحويل mysql:// إلى mysql+pymysql://
-    if DATABASE_URL.startswith('mysql://'):
-        DATABASE_URL = DATABASE_URL.replace('mysql://', 'mysql+pymysql://', 1)
-    print(f"✅ Using Railway DATABASE_URL")
-else:
-    # Fallback للتطوير المحلي فقط
+# إذا لم يوجد DATABASE_URL، يبنيه من الأجزاء
+if not DATABASE_URL:
     DB_USER = os.getenv('DB_USER', 'root')
     DB_PASSWORD = os.getenv('DB_PASSWORD', '')
     DB_HOST = os.getenv('DB_HOST', 'localhost')
@@ -30,25 +26,23 @@ else:
     
     if DB_PASSWORD:
         DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    else:
-        DATABASE_URL = None
 
 # === Validation ===
 def validate_config():
     errors = []
     
     if not TOKEN:
-        errors.append("❌ TOKEN غير موجود!")
+        errors.append("❌ TOKEN غير موجود في .env!")
     if not DEVELOPER_ID:
-        errors.append("❌ DEVELOPER_ID غير موجود!")
+        errors.append("❌ DEVELOPER_ID غير موجود في .env!")
     if not DATABASE_URL:
-        errors.append("❌ DATABASE_URL غير موجود! أضف MySQL في Railway.")
+        errors.append("❌ قاعدة البيانات غير مكونة في .env!")
     
     if errors:
         raise ValueError("\n".join(errors))
     
-    print("✅ All configurations loaded successfully!")
-    print(f"🗄️  Database: Railway MySQL")
+    print("✅ All configurations loaded from .env successfully!")
+    print(f"🗄️  Database: {'Railway' if 'railway' in DATABASE_URL else 'Custom MySQL'}")
 
 # تشغيل التحقق
 validate_config()
