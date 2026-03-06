@@ -12,19 +12,26 @@ API_ID = int(os.getenv('API_ID', '0')) if os.getenv('API_ID') else None
 API_HASH = os.getenv('API_HASH')
 
 # === Database Configuration ===
-# KataBump يدعم MySQL - استخدم المتغيرات التالية
-DB_HOST = os.getenv('DB_HOST', 'localhost')
-DB_PORT = int(os.getenv('DB_PORT', '3306'))
-DB_USER = os.getenv('DB_USER', 'root')
-DB_PASSWORD = os.getenv('DB_PASSWORD', '')
-DB_NAME = os.getenv('DB_NAME', 'telegram_bot')
+# Railway يعطي DATABASE_URL تلقائياً عند إضافة MySQL
+DATABASE_URL = os.getenv('DATABASE_URL')
 
-# بناء رابط الاتصال
-DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-# === KataBump Specific ===
-# المسار للملفات المؤقتة (KataBump يعطي /app كمسار رئيسي)
-DATA_DIR = os.getenv('DATA_DIR', '/app/data')
+if DATABASE_URL:
+    # تحويل mysql:// إلى mysql+pymysql://
+    if DATABASE_URL.startswith('mysql://'):
+        DATABASE_URL = DATABASE_URL.replace('mysql://', 'mysql+pymysql://', 1)
+    print(f"✅ Using Railway DATABASE_URL")
+else:
+    # Fallback للتطوير المحلي فقط
+    DB_USER = os.getenv('DB_USER', 'root')
+    DB_PASSWORD = os.getenv('DB_PASSWORD', '')
+    DB_HOST = os.getenv('DB_HOST', 'localhost')
+    DB_PORT = os.getenv('DB_PORT', '3306')
+    DB_NAME = os.getenv('DB_NAME', 'telegram_bot')
+    
+    if DB_PASSWORD:
+        DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    else:
+        DATABASE_URL = None
 
 # === Validation ===
 def validate_config():
@@ -34,15 +41,14 @@ def validate_config():
         errors.append("❌ TOKEN غير موجود!")
     if not DEVELOPER_ID:
         errors.append("❌ DEVELOPER_ID غير موجود!")
-    if not DB_PASSWORD:
-        errors.append("❌ DB_PASSWORD غير موجود!")
+    if not DATABASE_URL:
+        errors.append("❌ DATABASE_URL غير موجود! أضف MySQL في Railway.")
     
     if errors:
         raise ValueError("\n".join(errors))
     
     print("✅ All configurations loaded successfully!")
-    print(f"🗄️  Database Host: {DB_HOST}")
-    print(f"📁 Data Directory: {DATA_DIR}")
+    print(f"🗄️  Database: Railway MySQL")
 
-# تشغيل التحقق عند الاستيراد
+# تشغيل التحقق
 validate_config()
