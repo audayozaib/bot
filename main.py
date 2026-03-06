@@ -1,5 +1,6 @@
 import logging
 import asyncio
+from sqlalchemy import text
 from telegram.ext import (
     Application,
     CommandHandler,
