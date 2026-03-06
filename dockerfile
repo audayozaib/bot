@@ -12,14 +12,14 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # نسخ ملف المتطلبات وتثبيتها
-COPY requirements.txt .
+COPY Mybot-main/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# نسخ باقي ملفات المشروع
-COPY . .
+# نسخ باقي ملفات المشروع من المجلد الفرعي
+COPY Mybot-main/ .
 
-# إنشاء مجلد للبيانات (اختياري للملفات المؤقتة)
+# إنشاء مجلد للبيانات
 RUN mkdir -p /app/data
 
 # تشغيل البوت
-CMD ["python", "Mybot-main/main.py"]
+CMD ["python", "main.py"]
