@@ -48,7 +48,7 @@ def main():
     # ✅ تعديل 2: اختبار الاتصال بقاعدة البيانات قبل تشغيل البوت
     try:
         with db.get_db_session() as session:
-            session.execute("SELECT 1")
+            session.execute(text("SELECT 1"))
         logger.info("Database connection test successful")
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
